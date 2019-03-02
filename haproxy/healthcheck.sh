@@ -3,7 +3,7 @@
 
 set -o pipefail
 
-count=$(curl -s -k https://127.0.0.1:561/metrics | grep -P 'node_service_state{.*} 0' | wc -l)
+count=$(curl -s -k https://127.0.0.1:9998/metrics | grep -P 'node_service_state{.*} 0' | wc -l)
 if [ $? != 0 ] ; then
     exit 1
 fi

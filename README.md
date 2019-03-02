@@ -47,10 +47,12 @@ curl -X POST \
 * `ADMIN_AUTH` - default `yes` - enables HTTP basic auth on the `/api/v1/forwarder` endpoint on port
   `8443`.
 
+* `ADMIN_PASSWORD` - password to protect the forwarder endpoint with.
+
 * `WEBUI_SSL_SERVER_CERT` - Web UI SSL public cert. Can be filepaths in the container, literal PEM       certificates or blank. Blank causes the container to automatically generate certificates on 
   first run.
 
-* `WEBUI_SSL_SERVER_CERT` - Web UI SSL private key. Can be filepaths in the container, literal PEM       certificates or blank. Blank causes the container to automatically generate certificates on 
+* `WEBUI_SSL_SERVER_KEY` - Web UI SSL private key. Can be filepaths in the container, literal PEM       certificates or blank. Blank causes the container to automatically generate certificates on 
    first run.
 
 * `PLATFORM_TLS_TRUST_CERTIFICATES` if set, overrides the built-in list of public certificate roots.
