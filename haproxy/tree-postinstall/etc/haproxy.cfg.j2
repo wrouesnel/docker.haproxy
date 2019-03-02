@@ -1,0 +1,123 @@
+{% if admin_auth_enabled %}
+userlist AdminUsers
+  {% for user, password in admin_auth.items() %}
+  user {{user}} password {{password}}
+  {% endfor %}
+{% endif %}
+
+global
+  log /run/haproxy_logs local0
+  stats socket /run/haproxy.admin.sock expose-fd listeners mode 660 level admin
+  nbproc {{core_count}}
+  master-worker
+
+  # Default ciphers to use on SSL-enabled listening sockets.
+  # For more information, see ciphers(1SSL). This list is from:
+  #  https://hynek.me/articles/hardening-your-web-servers-ssl-ciphers/
+  # An alternative list with additional directives can be obtained from
+  #  https://mozilla.github.io/server-side-tls/ssl-config-generator/?server=haproxy
+  ssl-default-bind-ciphers ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:RSA+AESGCM:RSA+AES:!aNULL:!MD5:!DSS
+  ssl-default-bind-options no-sslv3
+
+# Adjust the timeout to your needs
+defaults
+  timeout client 60s
+  timeout server 60s
+  timeout connect 5s
+  log global
+  
+  option  dontlognull
+
+# Single VIP 
+frontend ft_http_vip
+  bind :80
+  mode http
+  
+  option  httplog
+
+  default_backend bk_http_default
+
+# Route HTTP (mostly so LetsEncrypt certs can work)
+backend bk_http_default
+  mode http
+
+  option httpchk
+  option forwardfor
+
+  {% for host, config in backends.items() %}
+  acl acl_{{host|replace(".","_")}} hdr_end(host) -i {{host}}
+  use-server server_{{host|replace(".","_")}} if acl_{{host|replace(".","_")}}
+  server server_{{host|replace(".","_")}} {{config.dest}}:{{config.http_port}} check
+  {% endfor %}
+
+# Single VIP 
+frontend ft_ssl_vip
+  bind :443
+  mode tcp
+  
+  tcp-request inspect-delay 5s
+  tcp-request content accept if { req_ssl_hello_type 1 }
+  
+  default_backend bk_ssl_default
+
+# Using SNI to take routing decision
+backend bk_ssl_default
+  mode tcp
+  
+  option ssl-hello-chk
+  
+  {% for host, config in backends.items() %}
+  acl acl_{{host|replace(".","_")}} req_ssl_sni -m end {{host}}
+  use-server server_{{host|replace(".","_")}} if acl_{{host|replace(".","_")}}
+  server server_{{host|replace(".","_")}} {{config.dest}}:{{config.https_port}} check
+  {% endfor %}
+
+# Admin interface
+frontend ft_ssl_admin
+  mode http
+  bind :8443 ssl crt /run/haproxy_certs.pem
+  
+  option forwardfor
+  option http-server-close
+  option httpclose
+  option httplog
+
+  {% if admin_auth_enabled %}
+  acl authorized http_auth(AdminUsers)
+  {% else %}
+  acl authorized always_true
+  {% endif %}
+  
+  # Implement the forwarder path
+  acl url_admin path_beg /api/v1/
+  acl url_metrics   path_beg /metrics
+
+  # Auth but only for the forwarder
+  http-request auth realm "Admin Portal" if !authorized url_admin
+
+  reqadd X-Forwarded-Proto:\ https
+
+  #use_backend bk_localhost_admin if authorized url_forwarder
+  use_backend bk_localhost_admin    if authorized url_admin
+  use_backend bk_localhost_metrics  if url_metrics
+
+  default_backend bk_localhost_nomatch
+
+# Using SNI to take routing decision
+backend bk_localhost_admin
+  mode http
+  # Remove auth header from the internal backend
+  http-request del-header Authorization
+  http-request set-path %[url,regsub(^/api/v1/,/hooks/,)]
+  server server_admin 127.0.0.1:9000
+
+# Using SNI to take routing decision
+backend bk_localhost_metrics
+  mode http
+  # Remove auth header from the internal backend
+  http-request del-header Authorization
+  server server_metrics 127.0.0.1:9998
+
+backend bk_localhost_nomatch
+  mode http
+  errorfile 503 /etc/haproxy/errors/404.http

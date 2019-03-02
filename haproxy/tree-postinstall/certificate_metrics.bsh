@@ -1,0 +1,22 @@
+#!/bin/bash
+# This script fills some holes in the current metrics stack.
+
+function cert_metrics_dates() {
+    certfile="$1"
+    service="$2"
+    
+    end_epoch=$(date +%s --date="$(openssl x509 -noout -in $certfile -enddate | cut -d'=' -f2)")
+    start_epoch=$(date +%s --date="$(openssl x509 -noout -in $certfile -startdate | cut -d'=' -f2)")
+    
+    echo "ssl_cert_not_after{file=\"$certfile\",service=\"$service\"} $end_epoch"
+    echo "ssl_cert_not_before{file=\"$certfile\",service=\"$service\"} $start_epoch"
+}
+
+#cert_metrics_dates "/run/nginx-cert.crt" "nginx"
+
+#cert_metrics_dates "/run/psql-cert.crt" "postgres"
+
+#cert_metrics_dates "/run/psql-clientcert.crt" "postgres-client"
+#cert_metrics_dates "/run/psql-clientca.crt" "postgres-clientca"
+
+exit 0

@@ -1,0 +1,344 @@
+#!/bin/bash
+
+# Ensure a private umask since we do a lot of SSL handling.
+umask 077
+
+function log() {
+    echo "$@"
+}
+
+function warn() {
+    echo "$@" > /run/log/init.warning
+}
+
+function fatal() {
+    echo "$@" 1>&2
+    if [ ! -z $INIT_PID ]; then
+        kill -TERM $INIT_PID
+    fi
+    exit 1
+}
+
+function genpassword() {
+    echo $(pwgen 48 1)
+}
+
+function stdbool() {
+    if [ -z "$1" ] ; then
+        echo "n"
+    else
+        echo ${1:0:1} | tr [A-Z] [a-z]
+    fi
+}
+
+# Reads the given environment variable name, detects if its a file and templates
+# it out to the given output file path. Optionally allows the process to be skipped
+# if the value is blank.
+# Usage: handle_file_input_envvar <options> ENVVAR OUTFILE
+# Valid options: --can-disable --allow-blank --append
+function handle_file_input_envvar() {
+    local can_disable allow_blank do_append
+
+    while true; do
+        case $1 in
+        --can-disable) can_disable=y ; shift ;;
+        --allow-blank) allow_blank=y ; shift ;;
+        --append) do_append=y ; shift ;;
+        *)
+            if [ "${1:0:2}" != "--" ] ; then
+                break
+            else  
+                fatal "handle_file_input_envvar: Unknown option received: $1"
+            fi
+            ;;
+        esac
+    done
+
+    local envvar="$1"
+    local outfile="$2"
+    
+    # Sanity checks
+    if [ "$#" -ne 2 ] ; then
+        log "handle_file_input_envvar: Got $# arguments, expected 2."
+        exit 1
+    fi
+    
+    eval local envval="\$$envvar"
+
+    if [ "${can_disable}" = "y" ] && [ "${envval}" = "disabled" ] ; then
+        log "$envvar disabled by user requested."
+        return
+    elif [ "${envval}" = "disabled" ] ; then
+        fatal "$envvar is set to \"disabled\" but this value is mandatory."
+        exit 1
+    fi
+    
+    if [ -z "${envval}" ] && [ "y" != "${allow_blank}" ]; then
+        fatal "$envvar is blank instead of being explicitly disabled and must contain a value."
+    fi
+    
+    if [ "${envval:0:1}" = "/" ] ; then
+        log "$envvar is path."
+        if [ ! -e "$envval" ] ; then
+            fatal "$envval does not exist."
+        fi
+        
+        if [ "$do_append" = "y" ] ; then
+            cat "$envval" >> "$outfile"
+        else
+            cat "$envval" > "$outfile"
+        fi
+    else
+        log "$envvar is literal."
+
+        if [ "$do_append" = "y" ] ; then
+            echo -n "$envval" >> "$outfile"
+        else
+            echo -n "$envval" > "$outfile"
+        fi
+    fi
+}
+
+function generate_or_load_password() {
+    local varname=$1
+    
+    local gencmd=genpassword
+    if [ ! -z "$2" ]; then
+        local gencmd="$2"
+    fi
+    
+    local varfile="${DATA_DIR}/$(echo $varname | tr [A-Z] [a-z]).secret"
+    eval local varval="\$$varname"
+
+    if [ -z "$varval" ]; then
+        if [ ! -e "$varfile" ]; then
+            log "Generating secret for $varname"
+            varval=$($gencmd)
+            echo -n "$varval" > "$varfile"
+            eval export $varname="$varval"
+        else
+            log "Loaded secret for $varname from $varfile"
+            local varval="$(cat $varfile)"
+            eval export $varname="$varval"
+        fi
+    else
+        log "$varname is not empty. Using provided value."
+        eval export $varname
+    fi
+}
+
+function own_if_exists() {
+    local ownerspec="$1"
+    local fname="$2"
+
+    if [ -z "$ownerspec" ]; then
+        fatal "own_if_exists: must specify file ownership of the form user:group or user:"
+    fi
+
+    if [ -z "$fname" ]; then
+        fatal "own_if_exists: must specify a filename as positional argument 2"
+    fi
+
+    if [ -e "${fname}" ]; then
+        chown $ownerspec "$fname" || fatal "Could not set ownership $ownerspec on file which exists $fname"
+    fi
+    return
+}
+
+if [ "$(stdbool $DEV_ENTRYPOINT_DEBUG)" = "y" ]; then
+    set -x
+fi
+
+export PATH=/usr/lib/postgresql/10/bin:$PATH
+
+if [ -z $HOSTNAME ] ; then
+    HOSTNAME=$(hostname -f)
+fi
+export HOSTNAME
+
+# Check DATA_DIR exists and is /data
+if [ "$DATA_DIR" != "/data" ]; then
+    fatal "You have overridden DATA_DIR to not be /data. This is not supported. Please instead mount a data directory here."
+fi
+
+# Early check DATA_DIR is a mountpoint
+if ! mountpoint "$DATA_DIR" && [ $(stdbool $DEV_ALLOW_EPHEMERAL_DATA) != "y" ] ; then
+    fatal "$DATA_DIR is not a mountpoint. Data will not persist, and this is not allowed."
+elif ! mountpoint "$DATA_DIR" ; then
+    #warn "WARNING: allowing an ephemeral data directory."
+    mkdir -m 755 -p "$DATA_DIR"
+fi
+
+chmod 755 $DATA_DIR
+
+# Initial syslog configuration
+export SERVICES="init init.warning"
+
+# Create the log directory
+mkdir /run/log
+chmod 755 /run/log
+mkfifo /run/log/init
+mkfifo /run/log/init.warning
+
+p2 -t /etc/syslog-ng.conf.p2 -o /run/syslog-ng.conf || ( fatal "Templating syslog-ng config failed." )
+chmod 644 /run/syslog-ng.conf
+
+# Start syslog-ng as early as possible so we can log with it.
+mkdir /run/services
+cp -af /etc/services/syslog-ng /run/services/syslog-ng
+runsvdir /run/services &
+export INIT_PID=$!
+trap "kill -TERM $INIT_PID 2> /dev/null" INT TERM EXIT
+
+#export admin_htpasswd=${DATA_DIR}/admin.htpasswd
+export admin_passwd=${DATA_DIR}/admin.passwd
+
+# Subshell the remainder of the script so it starts up properly
+
+(
+set -e
+
+log "Starting up with hostname: $HOSTNAME"
+
+# Create SSL configuration directory
+mkdir /run/ssl
+chmod 0755 /run/ssl
+mkdir /run/ca-certificates
+chmod 0755 /run/ca-certificates
+if [ -z "$PLATFORM_TLS_TRUST_CERTIFICATES" ]; then
+    if [ $(stdbool "$DEV_ALLOW_DEFAULT_TRUST") = "y" ]; then
+        # Allowing defaults
+        cp -a /etc/ssl.default/. /run/ssl/
+        cp -f  /etc/ca-certificates.conf.default /run/ca-certificates.conf
+        update-ca-certificates || fatal "Installing platform trust TLS certificates failed."
+    else
+        fatal "PLATFORM_TLS_TRUST_CERTIFICATES is blank but DEV_ALLOW_DEFAULT_TRUST is not set to yes."
+    fi
+else
+    # Generate the directory structure manually
+    mkdir /run/ssl/certs /run/ssl/private
+    chmod 0755 /run/ssl/certs
+    chmod 0750 /run/ssl/private
+    chown root:ssl-cert /run/ssl/private
+    cp -f /etc/ssl.default/openssl.cnf /run/ssl/
+    # Set a blank default certs path
+    touch /run/ca-certificates.conf
+    
+    # To make debugging easier, support a file path in PLATFORM_TLS_TRUST_CERTIFICATES
+    handle_file_input_envvar         --allow-blank       PLATFORM_TLS_TRUST_CERTIFICATES         /run/platform-ca-certs.crt
+    
+    ( cd /run/ca-certificates && \
+        awk 'BEGIN {c=0;} /BEGIN CERT/{c++} { print > "cert." c ".crt"}' < /run/platform-ca-certs.crt )
+
+    update-ca-certificates || fatal "Installing platform trust TLS certificates failed."
+fi
+
+# Logging isn't available till we get to here anyway.
+if [ -z "$PLATFORM_TLS_TRUST_CERTIFICATES" ]; then
+    warn "No TLS trust certificates specified. Default certificates will be used."
+else
+    log "Platform trust certificates specified."  
+fi
+
+if [ $(stdbool "$ADMIN_AUTH") = "y" ]; then
+    if [ -z "$ADMIN_USER" ] ; then
+        fatal "No ADMIN_USER specified. This is required for the time being."
+    fi
+
+    generate_or_load_password ADMIN_PASSWORD
+
+    # Force update the htpasswd file with the correct credentials
+    log "Force updating: $admin_passwd"
+    crypted_password=$(mkpasswd -m sha-512 "$ADMIN_PASSWORD")
+    echo "${ADMIN_USER}:${crypted_password}" > $admin_passwd
+
+    # echo "$ADMIN_PASSWORD" | htpasswd -ci "$admin_htpasswd" "$ADMIN_USER"
+    # if [ $? != 0 ] ; then
+    #     fatal "Error creating htpasswd file for API access."
+    # fi
+    # chown root:www-data "$admin_htpasswd"
+    # chmod 640 "$admin_htpasswd"
+else
+    warn "WARNING: ADMIN API authentication is DISABLED"
+fi
+
+if [ -z "${WEBUI_SSL_SERVER_CERT}" ] && [ -z "${WEBUI_SSL_SERVER_KEY}" ] ; then
+    if [ "$(stdbool $DEV_ALLOW_SELF_SIGNED)" != "y" ] ; then
+        fatal "WEBUI_SSL_SERVER_CERT and WEBUI_SSL_SERVER_KEY are blank but self-signed certificates are not allowed."    
+    fi
+    
+    log "WEBUI_SSL_SERVER_CERT and WEBUI_SSL_SERVER_KEY are blank. Generating self-signed certificate."
+
+    export WEBUI_SSL_SERVER_CERT=/run/webui-generated.crt
+    export WEBUI_SSL_SERVER_KEY=/run/webui-generated.pem
+
+    openssl req -x509 -newkey rsa:4096 \
+        -keyout $WEBUI_SSL_SERVER_KEY \
+        -out $WEBUI_SSL_SERVER_CERT \
+        -days 3065 -nodes \
+        -subj "/CN=$HOSTNAME"
+    if [ $? != 0 ]; then
+        fatal "Self-signed certificate generation failed."
+    fi
+fi
+
+if [ -z "${WEBUI_SSL_SERVER_CERT}" ] ; then
+    fatal "SSL_SERVER_CERT is blank but other SSL fields are not. This is invalid."
+fi
+
+if [ -z "${WEBUI_SSL_SERVER_KEY}" ] ; then
+    fatal "SSL_SERVER_KEY is blank but other SSL fields are not. This is invalid."
+fi
+
+handle_file_input_envvar                WEBUI_SSL_SERVER_CERT    /run/nginx-cert.crt
+handle_file_input_envvar --append --allow-blank WEBUI_SSL_SERVER_CERT      /run/nginx-cert.crt
+handle_file_input_envvar                WEBUI_SSL_SERVER_KEY     /run/nginx-key.pem
+
+# Combine supplied certs for HAproxy to use
+cat /run/nginx-cert.crt /run/nginx-key.pem > /run/haproxy_certs.pem
+chmod 640 /run/haproxy_certs.pem
+
+log "Checking data directory status..."
+if ! mountpoint "$DATA_DIR" && [ $(stdbool $DEV_ALLOW_EPHEMERAL_DATA) != "y" ] ; then
+    fatal "$DATA_DIR is not a mountpoint. Data will not persist, and this is not allowed."
+elif ! mountpoint "$DATA_DIR" ; then
+    warn "WARNING: allowing an ephemeral data directory."
+    mkdir -m 755 -p "$DATA_DIR"
+fi
+
+log "Templating syslog-ng configuration..."
+export SERVICES="$(ls -1 /etc/services | tr '\n' ' ')nginx-access nginx-error init init.warning"
+p2 -t /etc/syslog-ng.conf.p2 -o /run/syslog-ng.conf || ( fatal "Templating syslog-ng config failed." )
+chmod 644 /run/syslog-ng.conf
+
+log "Create logging fifo directory"
+mkdir -p /run/log
+
+log "Templating initial HAProxy configuration"
+/usr/local/bin/webhook-forwarder template
+chmod 644 /run/haproxy.cfg
+
+# Start all services now
+cp -af /etc/services /run
+sv restart syslog-ng
+) > /run/log/init 2>&1
+
+if [ $? -ne 0 ]; then
+    warn "Initialization stanza exited non-zero. Container aborting."
+    exit $?
+fi
+
+# This allows running a custom command in the context of the startup, but
+# forces the container to exit after it happens to avoid accidentally contaminating
+# production environments.
+if [ $# -ne 0 ]; then
+    (
+    log "Executing custom command"
+    "$@"
+    ) > /run/log/init 2>&1
+    exit $?
+else
+    wait $INIT_PID
+    wait $INIT_PID
+    exit $?
+fi

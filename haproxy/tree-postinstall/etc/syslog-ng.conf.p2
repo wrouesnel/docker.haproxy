@@ -1,0 +1,44 @@
+@version: 3.13
+
+options {
+    ts_format(rfc3339);
+    frac_digits(6);
+};
+
+destination d_container {
+    file( "/proc/1/fd/1" flags(no-multi-line) flush-lines(1) template("$(format-json --pair timestamp=$R_STAMP --pair msg=$MSG --pair service=$service )\n") );
+};
+
+# Specialized listener for HAproxy
+source s_service_haproxy_logs {
+    unix-dgram( "/run/haproxy_logs" max-connections(10) );  
+};
+
+rewrite r_service_haproxy_logs {
+    set( "haproxy_logs" value("service") );
+};
+
+log {
+    source(s_service_haproxy_logs);
+    rewrite(r_service_haproxy_logs);
+    destination(d_container);
+};
+
+{% for service in SERVICES|split:" " %}
+source s_service_{{service}} {
+    pipe( "/run/log/{{service}}" flags(no-parse) );
+    
+};
+
+rewrite r_service_{{service}} {
+    set( "{{service}}" value("service") );
+};
+
+log {
+    source(s_service_{{service}});
+    rewrite(r_service_{{service}});
+    destination(d_container);
+};
+{% endfor %}
+
+

@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import subprocess
+from sqlitedict import SqliteDict
+from jinja2 import Template
+
+import ruamel.yaml as yaml
+import click
+import structlog
+import re
+
+HOSTNAME_RX = re.compile(r"^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])\.?$")
+
+logger = structlog.getLogger()
+
+# These are constants within the docker container
+ADMIN_AUTH = "/data/admin.passwd"
+OUTPUT_PATH = "/data/persistence.db"
+HAPROXY_TMPL = "/etc/haproxy.cfg.j2"
+HAPROXY_PATH = "/run/haproxy.cfg"
+
+def update_haproxy(d):
+    logger.info("Updating HAProxy template configuration")
+    with open(HAPROXY_TMPL,"rt") as tmplf:
+        t = Template(tmplf.read())
+
+    admin_auth = {}
+    admin_auth_enabled = True if os.environ.get("ADMIN_AUTH","yes").lower()[0] == "y" else False
+
+    if admin_auth_enabled:
+        with open(ADMIN_AUTH, "rt") as adminf:
+            for l in adminf.read().split("\n"):
+                l = l.strip()
+                if l is None or l == "":
+                    continue
+                user, password = l.split(":",1)
+                admin_auth[user] = password
+
+    with open(HAPROXY_PATH, "wt") as fout:
+        fout.write(t.render(backends=d, 
+                            core_count=os.environ.get("CORE_COUNT",1), 
+                            admin_auth=admin_auth,
+                            admin_auth_enabled=admin_auth_enabled))
+
+@click.group()
+def cli():
+    pass
+
+@cli.command("template")
+def template():
+    # Persist the new change
+    d = SqliteDict(OUTPUT_PATH)
+    # Update the haproxy.cfg
+    update_haproxy(d)
+    sys.exit(0)
+
+@cli.command("update")
+@click.argument("host")
+@click.argument("http_port")
+@click.argument("https_port")
+@click.argument("dest")
+def update(host, http_port, https_port, dest):
+    if HOSTNAME_RX.match(host) is None:
+        sys.exit(1)
+
+    if HOSTNAME_RX.match(dest) is None:
+        sys.exit(1)
+
+    try:
+        http_port = int(http_port)
+    except:
+        sys.exit(1)
+
+    try:
+        https_port = int(https_port)
+    except:
+        sys.exit(1)
+
+    # Persist the new change
+    d = SqliteDict(OUTPUT_PATH,autocommit=True)
+
+    d[host] = {
+        "http_port" : http_port,
+        "https_port" : https_port,
+        "dest" : dest,
+    }
+
+    # Update the haproxy.cfg
+    update_haproxy(d)
+
+    # Reload Haproxy config
+    subprocess.call(["sv","reload","haproxy"])
+
+    sys.exit(0)
+
+if __name__ == "__main__":
+    cli()

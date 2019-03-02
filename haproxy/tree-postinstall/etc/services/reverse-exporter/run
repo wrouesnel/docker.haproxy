@@ -1,0 +1,5 @@
+#!/bin/sh
+[ ! -e /run/log/reverse-exporter ] && mkfifo /run/log/reverse-exporter
+exec /usr/local/bin/reverse_exporter \
+    --http.listen-addrs="tcp://127.0.0.1:9998" \
+    --config.file="/etc/reverse_exporter.yml" > /run/log/reverse-exporter 2>&1

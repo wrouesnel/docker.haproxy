@@ -1,0 +1,41 @@
+---
+- id: forwarder
+  execute-command: /usr/local/bin/webhook-forwarder
+  pass-arguments-to-command:
+  - source: string
+    name: update
+  - source: payload
+    name: host
+  - source: payload
+    name: http_port
+  - source: payload
+    name: https_port
+  - source: payload
+    name: dest
+
+#- id: ldap_sync
+#  execute-command: /usr/local/bin/webhook-ralp-ldap-sync
+#  include-command-output-in-response: true
+#  command-working-directory: /tmp  
+#  
+#- id: migrate
+#  execute-command: /usr/local/bin/webhook-ralph-migrate
+#  include-command-output-in-response: true
+#  command-working-directory: /tmp
+#  
+#- id: sitetree_resync_apps
+#  execute-command: /usr/local/bin/webhook-ralph-sitetree_resync_apps
+#  include-command-output-in-response: true
+#  command-working-directory: /tmp
+
+#- id: createsuperuser
+#  execute-command: /usr/local/bin/webhook-ralph-createsuperuser
+#  pass-arguments-to-command:
+#  - source: payload
+#    name: username
+#  - source: payload
+#    name: password
+#  - source: payload
+#    name: email
+#  include-command-output-in-response: true
+#  command-working-directory: /tmp

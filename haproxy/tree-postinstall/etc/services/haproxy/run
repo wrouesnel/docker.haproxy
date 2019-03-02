@@ -1,0 +1,54 @@
+#!/bin/bash
+
+[ ! -e /run/log/haproxy ] && mkfifo /run/log/haproxy
+
+# Start haproxy, keep in foreground, but background in the bash script.
+haproxy \
+    -db \
+    -p /run/haproxy.pid \
+    -f /run/haproxy.cfg \
+    1> /run/log/haproxy 2>&1 &
+
+# Record the HAproxy master pid
+haproxy_pid=$!
+# Guardian value to detect shutdowns
+shutdown=1
+
+# Allow seamless reloads to work.
+# Note: depends on listen-fds being set in the config file, which it is
+# in this docker container.
+function reload_haproxy() {
+    shutdown=1
+    haproxy \
+        -db \
+        -p /run/haproxy.pid \
+        -f /run/haproxy.cfg \
+        -sf $(cat /run/haproxy.pid) \
+        -x /run/haproxy.admin.sock \
+        1> /run/log/haproxy 2>&1 &
+    haproxy_pid=$!
+}
+
+function kill_haproxy() {
+    # Flag that we are shutting down
+    shutdown=0
+    # Request HAproxy exit
+    kill -TERM $haproxy_pid
+}
+
+trap "reload_haproxy" HUP
+trap "kill_haproxy" TERM INT
+
+# We need to be in this loop to handle signals, since 
+# an HAproxy reload will change the reload script.
+while [ 1 ] ; do
+    # Wait on the current haproxy pid
+    wait $haproxy_pid
+    # Reload or a kill means process ends.
+    if [ $shutdown -eq 0 ] ; then
+        # Exit loop for shutdown
+        break
+    fi
+    # If we exit without anyone telling us not to, we want to crash out.
+    shutdown=0
+done

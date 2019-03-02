@@ -1,0 +1,17 @@
+reverse_exporters:
+- path: /metrics
+  exporters:
+  - http:
+      # Note we have to account for the external-url paths
+      address: http://127.0.0.1:9100/metrics
+      name: node_exporter
+      timeout: 1s
+  - http:
+      # Note we have to account for the external-url paths
+      address: http://127.0.0.1:9101/metrics
+      name: haproxy
+      timeout: 1s
+  - exec:
+      command: /certificate_metrics.bsh
+      name: certificates
+      timeout: 1s

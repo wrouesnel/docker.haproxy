@@ -1,0 +1,8 @@
+#!/bin/sh
+
+[ ! -e /run/log/haproxy-exporter ] && mkfifo /run/log/haproxy-exporter
+
+exec haproxy_exporter \
+    --haproxy.scrape-uri=unix:/run/haproxy.admin.sock \
+    --web.listen-address=127.0.0.1:9101 \
+    1> /run/log/haproxy-exporter 2>&1

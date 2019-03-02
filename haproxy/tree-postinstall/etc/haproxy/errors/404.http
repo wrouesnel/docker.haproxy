@@ -1,0 +1,10 @@
+HTTP/1.0 404 Bad request
+Cache-Control: no-cache
+Connection: close
+Content-Type: text/html
+
+<html><body><h1>404 Not Found</h1>
+Could not find the requested resource.
+</body></html>
+
+

@@ -1,0 +1,5 @@
+#!/bin/sh
+
+[ ! -e /run/log/webhook ] && mkfifo /run/log/webhook
+
+exec webhook -ip 127.0.0.1 -hooks /etc/webhook.yml -verbose 1> /run/log/webhook 2>&1

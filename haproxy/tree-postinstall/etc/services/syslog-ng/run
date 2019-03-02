@@ -1,0 +1,6 @@
+#!/bin/sh
+# Syslog is special and we redirect its logging to stderr
+exec syslog-ng --no-caps -F -f /run/syslog-ng.conf \
+    --persist-file=${DATA_DIR}/syslog-ng.persist \
+    --pidfile /run/syslog-ng.pid \
+    --control /run/syslog-ng.ctl

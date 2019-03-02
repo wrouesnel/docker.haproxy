@@ -1,0 +1,10 @@
+#!/bin/sh
+
+[ ! -e /run/log/node-exporter ] && mkfifo /run/log/node-exporter
+
+exec node_exporter \
+    --web.listen-address=127.0.0.1:9100 \
+    --collector.ntp \
+    --collector.ntp.server="$NTP_SERVER" \
+    --collector.runit \
+    --collector.runit.servicedir=/run/services 1> /run/log/node-exporter 2>&1
