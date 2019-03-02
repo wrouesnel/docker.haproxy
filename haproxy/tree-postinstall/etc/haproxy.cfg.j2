@@ -30,7 +30,7 @@ defaults
 
 # Single VIP 
 frontend ft_http_vip
-  bind :80
+  bind :{{http_port}}
   mode http
   
   option  httplog
@@ -52,7 +52,7 @@ backend bk_http_default
 
 # Single VIP 
 frontend ft_ssl_vip
-  bind :443
+  bind :{{https_port}}
   mode tcp
   
   tcp-request inspect-delay 5s
@@ -75,7 +75,7 @@ backend bk_ssl_default
 # Admin interface
 frontend ft_ssl_admin
   mode http
-  bind :8443 ssl crt /run/haproxy_certs.pem
+  bind :{{admin_https_port}} ssl crt /run/haproxy_certs.pem
   
   option forwardfor
   option http-server-close

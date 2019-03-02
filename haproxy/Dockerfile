@@ -110,7 +110,11 @@ ENV \
     # Enable debugging
     DEV_ENTRYPOINT_DEBUG=no \
     # Path or literal certificates to use as platform trust certificates
-    PLATFORM_TLS_TRUST_CERTIFICATES= 
+    PLATFORM_TLS_TRUST_CERTIFICATES= \
+    # Ports to use the HAproxy server
+    HTTP_PORT=80 \
+    HTTPS_PORT=443 \
+    ADMIN_HTTPS_PORT=8443
 
 COPY healthcheck.sh /healthcheck.sh
 HEALTHCHECK --interval=10s --timeout=10s --retries=3 CMD /healthcheck.sh

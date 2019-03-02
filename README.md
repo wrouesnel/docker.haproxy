@@ -58,3 +58,9 @@ curl -X POST \
 * `PLATFORM_TLS_TRUST_CERTIFICATES` if set, overrides the built-in list of public certificate roots.
   Good for dealing with corporate firewalls or secure environments (a privately deployed container
   shouldn't ever need to trust public certs on the internet for example).
+
+* `HTTP_PORT=80` port on which to serve the HTTP router.
+
+* `HTTPS_PORT=443` port on which to serve the SNI HTTPS router.
+
+* `ADMIN_HTTPS_PORT=8443` port on which to serve the admin interface.
