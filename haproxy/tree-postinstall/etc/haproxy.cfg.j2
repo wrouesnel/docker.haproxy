@@ -47,7 +47,7 @@ backend bk_http_default
   {% for host, config in backends.items() %}
   acl acl_{{host|replace(".","_")}} hdr_end(host) -i {{host}}
   use-server server_{{host|replace(".","_")}} if acl_{{host|replace(".","_")}}
-  server server_{{host|replace(".","_")}} {{config.dest}}:{{config.http_port}} check
+  server server_{{host|replace(".","_")}} {{config.dest}}:{{config.http_port}}
   {% endfor %}
 
 # Single VIP 
@@ -69,7 +69,7 @@ backend bk_ssl_default
   {% for host, config in backends.items() %}
   acl acl_{{host|replace(".","_")}} req_ssl_sni -m end {{host}}
   use-server server_{{host|replace(".","_")}} if acl_{{host|replace(".","_")}}
-  server server_{{host|replace(".","_")}} {{config.dest}}:{{config.https_port}} check
+  server server_{{host|replace(".","_")}} {{config.dest}}:{{config.https_port}}
   {% endfor %}
 
 # Admin interface
