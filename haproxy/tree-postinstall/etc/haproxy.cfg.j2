@@ -64,7 +64,7 @@ frontend ft_ssl_vip
 backend bk_ssl_default
   mode tcp
   
-  option ssl-hello-chk
+  option tcp-check
   
   {% for host, config in backends.items() %}
   acl acl_{{host|replace(".","_")}} req_ssl_sni -m end {{host}}
