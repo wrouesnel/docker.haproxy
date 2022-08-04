@@ -46,6 +46,7 @@ def update_haproxy(d):
                             http_port=os.environ.get("HTTP_PORT","80"),
                             https_port=os.environ.get("HTTPS_PORT","443"),
                             admin_https_port=os.environ.get("ADMIN_HTTP_PORT","8443")))
+        fout.write("\n")
 
 @click.group()
 def cli():

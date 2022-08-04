@@ -162,9 +162,9 @@ if [ "$DATA_DIR" != "/data" ]; then
 fi
 
 # Early check DATA_DIR is a mountpoint
-if ! mountpoint "$DATA_DIR" && [ $(stdbool $DEV_ALLOW_EPHEMERAL_DATA) != "y" ] ; then
+if ! mountpoint "$DATA_DIR" >/dev/null 2>&1 && [ $(stdbool $DEV_ALLOW_EPHEMERAL_DATA) != "y" ] ; then
     fatal "$DATA_DIR is not a mountpoint. Data will not persist, and this is not allowed."
-elif ! mountpoint "$DATA_DIR" ; then
+elif ! mountpoint "$DATA_DIR" >/dev/null 2>&1 ; then
     #warn "WARNING: allowing an ephemeral data directory."
     mkdir -m 755 -p "$DATA_DIR"
 fi
@@ -317,6 +317,31 @@ mkdir -p /run/log
 log "Templating initial HAProxy configuration"
 /usr/local/bin/webhook-forwarder template
 chmod 644 /run/haproxy.cfg
+
+# If proxychains is requested and config templating is active
+if [ "$PROXYCHAIN" = "yes" ] && [ "$CONFIG_DISABLE" != "yes" ]; then
+    echo "# PROXYCHAIN CONFIG FROM DOCKER" > /etc/proxychains4.conf
+    # Enable remote DNS proxy
+    if [ ! -z "$PROXYCHAIN_DNS" ]; then
+        echo "proxy_dns" >> /etc/proxychains4.conf
+    fi
+    # Configure proxy type
+    if [ ! -z "$PROXYCHAIN_TYPE" ]; then
+        echo "$PROXYCHAIN_TYPE" >> /etc/proxychains4.conf
+    else
+        echo "strict_chain" >> /etc/proxychains4.conf
+    fi
+    
+    echo "[ProxyList]" >> /etc/proxychains4.conf
+    env | grep 'PROXYCHAIN_PROXY' | sort | while read -r proxyline; do
+        #echo "# $proxyline " >> /etc/squid4/squid.conf
+        line=$(echo "$proxyline" | cut -d'=' -f2-)
+        echo "$line" >> /etc/proxychains4.conf
+        log "Configured proxy: $line"
+    done
+else
+    log "/etc/proxychains.conf : CONFIGURATION TEMPLATING IS DISABLED"
+fi
 
 # Start all services now
 cp -af /etc/services /run

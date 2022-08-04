@@ -3,7 +3,8 @@ BIN_DIR = .bin
 
 SRC := $(shell find . \( -path './.git' -o -path './.docker.log' -o -path './.dockerid' -o -path './tests/venv' \) -prune -o -print)
 
-DOCKER_HOST ?= unix:///var/run/docker.sock
+DOCKER_CMD ?= docker
+#DOCKER_HOST ?= unix:///var/run/docker.sock
 DOCKER_BUILD_ARGS ?= --build-arg http_proxy=$(http_proxy) --build-arg https_proxy=$(https_proxy)
 
 CIDFILE ?= .cidfile
@@ -27,12 +28,12 @@ $(MAKECERTS):
 	chmod +x $@
 
 .dockerid: $(SRC)
-	docker build --iidfile=$(DOCKERID) $(DOCKER_BUILD_ARGS) $(EXTRA_BUILD_ARGS) $(APPNAME)
+	$(DOCKER_CMD) build --iidfile=$(DOCKERID) $(DOCKER_BUILD_ARGS) $(EXTRA_BUILD_ARGS) $(APPNAME)
 
 tar: $(APPNAME).tar
 
 $(APPNAME).tar: $(DOCKERID)
-	docker save -o $(APPNAME).tar $(shell cat $(DOCKERID))
+	$(DOCKER_CMD) save -o $(APPNAME).tar $(shell cat $(DOCKERID))
 
 #test: $(DOCKERID) $(TASKGRAPH)
 #	DOCKER_IMAGE=$(shell cat $(DOCKERID)) DOCKER_PREFIX=$(DOCKER_PREFIX) DOCKERHUB_PREFIX=$(DOCKERHUB_PREFIX) $(TASKGRAPH) \
@@ -48,7 +49,7 @@ $(APPNAME).tar: $(DOCKERID)
 
 enter-it: $(DOCKERID)
 	rm -f $(CIDFILE)
-	docker run -e SSL_CLIENT_CACERT=disabled -e DEV_ALLOW_SELF_SIGNED=yes \
+	$(DOCKER_CMD) run -e SSL_CLIENT_CACERT=disabled -e DEV_ALLOW_SELF_SIGNED=yes \
 		-e DEV_ALLOW_EPHEMERAL_DATA=yes -e API_AUTH=disabled \
 		-e DEV_ALLOW_DEFAULT_TRUST=yes -e DEV_NO_ALERT_EMAILS=yes -e DEV_NO_SMARTHOST=yes \
 		--tmpfs /run:suid,exec --tmpfs /tmp:suid,exec --tmpfs /data:suid,exec \
@@ -57,7 +58,7 @@ enter-it: $(DOCKERID)
 		
 run-it: $(DOCKERID)
 	rm -f $(CIDFILE)
-	docker run -e SSL_CLIENT_CACERT=disabled -e DEV_ALLOW_SELF_SIGNED=yes \
+	$(DOCKER_CMD) run -e SSL_CLIENT_CACERT=disabled -e DEV_ALLOW_SELF_SIGNED=yes \
 		-e DEV_ALLOW_EPHEMERAL_DATA=yes -e ADMIN_AUTH=disabled -e DEV_STANDALONE=yes \
 		-e DEV_ALLOW_DEFAULT_TRUST=yes -e DEV_NO_ALERT_EMAILS=yes -e DEV_NO_SMARTHOST=yes \
 		--tmpfs /run:suid,exec --tmpfs /tmp:suid,exec --tmpfs /data:suid,exec \
@@ -66,19 +67,19 @@ run-it: $(DOCKERID)
 
 run: $(DOCKERID)
 	rm -f $(CIDFILE)
-	docker run --rm --cidfile=$(CIDFILE) `cat $(DOCKERID)`
+	$(DOCKER_CMD) run --rm --cidfile=$(CIDFILE) `cat $(DOCKERID)`
 
 # Exec's into the most recently run container.
 exec-into:
-	docker exec -it $(shell cat $(CIDFILE)) /bin/bash
+	$(DOCKER_CMD) exec -it $(shell cat $(CIDFILE)) /bin/bash
 
 init-it:
 	wget -O - --no-check-certificate \
-		"https://$(shell docker inspect -f '{{ .NetworkSettings.IPAddress }}' $(shell cat $(CIDFILE)))/info/schema.standalone.pgsql.sql" \
-		| docker exec -i $(shell cat $(CIDFILE)) psql "dbname=pdns user=powerdns"
+		"https://$(shell $(DOCKER_CMD) inspect -f '{{ .NetworkSettings.IPAddress }}' $(shell cat $(CIDFILE)))/info/schema.standalone.pgsql.sql" \
+		| $(DOCKER_CMD) exec -i $(shell cat $(CIDFILE)) psql "dbname=pdns user=powerdns"
 
 get-ip:
-	@docker inspect -f '{{ .NetworkSettings.IPAddress }}' $(shell cat $(CIDFILE))
+	@$(DOCKER_CMD) inspect -f '{{ .NetworkSettings.IPAddress }}' $(shell cat $(CIDFILE))
 
 clean:
 	rm -f $(CIDFILE) $(DOCKERID)

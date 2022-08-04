@@ -64,3 +64,27 @@ curl -X POST \
 * `HTTPS_PORT=443` port on which to serve the SNI HTTPS router.
 
 * `ADMIN_HTTPS_PORT=8443` port on which to serve the admin interface.
+
+# Proxychains-ng
+In certain circumstances you may need to run an HAProxy which contacts hosts behind
+a regular HTTP forward proxy. This is not supported in haproxy out of the box but
+can be accomplished with proxychans.
+
+proxychains-ng is configured with the following environment variables. As with the
+others above, `CONFIG_DISABLE` prevents overwriting templated files.
+
+ * `PROXYCHAIN`
+    Default none. If set to `yes` then squid will be launched with proxychains.
+    You should specify some proxies when doing this.
+ * `PROXYCHAIN_PROXYx`
+    Upstream proxies to be passed to the proxy chan config file. The suffix (`x`)
+    determines the order in which they are templated into the configuration file.
+    The format is a space separated string like "http 127.0.0.1 3129"
+ * `PROXYCHAIN_TYPE`
+    Default `strict_chain`. Can be `strict_chain` or `dynamic_chain` sensibly
+    within this image. In `strict_chain` mode, all proxies must be up. In
+    `dynamic_chain` mode proxies are used in order, but skipped if down.
+    Disable configuration and bind a configuration file to /etc/proxychains.conf
+    if you need more flexibility.
+ * `PROXYCHAIN_DNS`
+   Default none. When set to `yes`, turns on the `proxy_dns` option for Proxychains.

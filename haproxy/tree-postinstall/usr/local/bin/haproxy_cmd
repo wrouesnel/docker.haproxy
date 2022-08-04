@@ -1,0 +1,13 @@
+#!/bin/bash
+# Wrapper command to implement proxychains redirected HAProxy
+if [ "$PROXYCHAIN" = "yes" ]; then
+    if [ ! -e /etc/proxychains4.conf ]; then
+        echo "ERROR: /etc/proxychains4.conf does not exist. haproxy with proxychains will not work."
+        exit 1
+    fi 
+    # Start haproxy with proxychains
+    exec proxychains4 -f /etc/proxychains4.conf haproxy "$@"
+else
+    # Start haproxy normally
+    exec haproxy "$@"
+fi

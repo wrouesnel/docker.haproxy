@@ -3,7 +3,7 @@
 [ ! -e /run/log/haproxy ] && mkfifo /run/log/haproxy
 
 # Start haproxy, keep in foreground, but background in the bash script.
-haproxy \
+haproxy_cmd \
     -db \
     -p /run/haproxy.pid \
     -f /run/haproxy.cfg \
@@ -19,7 +19,7 @@ shutdown=1
 # in this docker container.
 function reload_haproxy() {
     shutdown=1
-    haproxy \
+    haproxy_cmd \
         -db \
         -p /run/haproxy.pid \
         -f /run/haproxy.cfg \

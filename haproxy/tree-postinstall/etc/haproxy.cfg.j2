@@ -95,7 +95,7 @@ frontend ft_ssl_admin
   # Auth but only for the forwarder
   http-request auth realm "Admin Portal" if !authorized url_admin
 
-  reqadd X-Forwarded-Proto:\ https
+  http-request add-header X-Forwarded-Proto https
 
   #use_backend bk_localhost_admin if authorized url_forwarder
   use_backend bk_localhost_admin    if authorized url_admin

@@ -1,6 +1,4 @@
-FROM ubuntu
-
-FROM ${DOCKER_PREFIX}ubuntu:bionic
+FROM ${DOCKER_PREFIX}ubuntu:22.04
 
 ARG URL_P2CLI=https://github.com/wrouesnel/p2cli/releases/download/r5/p2
 ARG URL_REVERSE_EXPORTER=https://github.com/wrouesnel/reverse_exporter/releases/download/v0.0.1/reverse_exporter_v0.0.1_linux-amd64.tar.gz
@@ -21,14 +19,15 @@ COPY tree-preinstall/ /
 
 RUN apt-get update && apt-get install --no-install-recommends -y gnupg2 ca-certificates
 
-RUN find -path '/tmp/*.asc' -exec /bin/bash -c 'apt-key add {} && rm -f {}' \;
+RUN find "/tmp" -path '/tmp/*.asc' -exec /bin/bash -c 'apt-key add {} && rm -f {}' \;
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
         runit \
-        syslog-ng-core syslog-ng-mod-json \
+        syslog-ng-core \
         openssl \
         pwgen \
-        wget curl dnsutils apache2-utils net-tools iproute2 rsync sudo jq ssl-cert less
+        wget curl dnsutils apache2-utils net-tools iproute2 rsync sudo jq ssl-cert less \
+        proxychains4
 
 RUN DEBIAN_FRONTEND=noninteractive apt update && \
     apt install -y haproxy haproxyctl wget tar && \
