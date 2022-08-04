@@ -332,6 +332,9 @@ if [ "$PROXYCHAIN" = "yes" ] && [ "$CONFIG_DISABLE" != "yes" ]; then
         echo "strict_chain" >> /etc/proxychains4.conf
     fi
     
+    echo "localnet 127.0.0.0/255.0.0.0" >> /etc/proxychains4.conf
+    echo "localnet ::1/128" >> /etc/proxychains4.conf
+
     echo "[ProxyList]" >> /etc/proxychains4.conf
     env | grep 'PROXYCHAIN_PROXY' | sort | while read -r proxyline; do
         #echo "# $proxyline " >> /etc/squid4/squid.conf
