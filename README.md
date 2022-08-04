@@ -16,6 +16,11 @@ for downstream servers.
 
 ## Usage
 
+Available on gchr:
+```
+docker pull ghcr.io/wrouesnel/haproxy
+```
+
 This container is designed to be dynamically reconfigured. It exposes
 a simple REST API which manages the HAproxy configurations. Optionally
 the config can be persisted by mounting the `/data` directory to a
