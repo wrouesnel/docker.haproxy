@@ -309,7 +309,7 @@ elif ! mountpoint "$DATA_DIR" ; then
 fi
 
 log "Templating syslog-ng configuration..."
-export SERVICES="$(find /etc/services -printf "%f ")nginx-access nginx-error init init.warning"
+export SERVICES="$(find /etc/services -maxdepth 1 -mindepth 1 -printf "%f ")nginx-access nginx-error init init.warning"
 p2 -t /etc/syslog-ng.conf.p2 -o /run/syslog-ng.conf || ( fatal "Templating syslog-ng config failed." )
 chmod 644 /run/syslog-ng.conf
 
