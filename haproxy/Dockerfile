@@ -18,7 +18,7 @@ ENV DATA_DIR=/data \
 
 RUN mkdir ${DATA_DIR} \
  && mkdir ${CONFIG_DIR} \
- && chown 0: ${DATA_DIR} ${CONFIG_DIR} \
+ && chown 0:0 ${DATA_DIR} ${CONFIG_DIR} \
  && chmod 755 ${DATA_DIR} ${CONFIG_DIR}
 
 COPY tree-preinstall/ /
