@@ -5,7 +5,7 @@ import os
 import subprocess
 from sqlitedict import SqliteDict
 from jinja2 import Template
-from types import Mapping, Sequence
+from typing import Mapping, Sequence
 
 import ruamel.yaml as yaml
 import json
