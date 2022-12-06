@@ -115,7 +115,7 @@ def update_from_file(filename):
         if os.path.isfile(fpath):
             logger.info(f"Applying config from {fpath}")
             with open(fpath, "r") as f:
-                base = json.load(filename)
+                base = json.load(f)
                 if isinstance(base, Sequence):
                     for j in base:
                         do_update(j["host"],j["http_port"],j["https_port"],j["dest"])
