@@ -13,7 +13,13 @@ ARG https_proxy=
 
 # Static env-vars  - should not be overridden
 ENV DATA_DIR=/data \
+    CONFIG_DIR=/config \
     SVDIR=/run/services
+
+RUN mkdir ${DATA_DIR} \
+ && mkdir ${CONFIG_DIR} \
+ && chown 0: ${DATA_DIR} ${CONFIG_DIR} \
+ && chmod 755 ${DATA_DIR} ${CONFIG_DIR}
 
 COPY tree-preinstall/ /
 

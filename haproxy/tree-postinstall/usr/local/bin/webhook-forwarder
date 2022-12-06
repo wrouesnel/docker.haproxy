@@ -5,8 +5,10 @@ import os
 import subprocess
 from sqlitedict import SqliteDict
 from jinja2 import Template
+from types import Mapping, Sequence
 
 import ruamel.yaml as yaml
+import json
 import click
 import structlog
 import re
@@ -48,24 +50,9 @@ def update_haproxy(d):
                             admin_https_port=os.environ.get("ADMIN_HTTP_PORT","8443")))
         fout.write("\n")
 
-@click.group()
-def cli():
-    pass
-
-@cli.command("template")
-def template():
-    # Persist the new change
-    d = SqliteDict(OUTPUT_PATH)
-    # Update the haproxy.cfg
-    update_haproxy(d)
-    sys.exit(0)
-
-@cli.command("update")
-@click.argument("host")
-@click.argument("http_port")
-@click.argument("https_port")
-@click.argument("dest")
-def update(host, http_port, https_port, dest):
+def do_update(host, http_port, https_port, dest):
+    """do_update implements the actual update logic"""
+    logger.info(f"Updating HAProxy for: {host} {http_port} {https_port} {dest}")
     if HOSTNAME_RX.match(host) is None:
         sys.exit(1)
 
@@ -97,6 +84,44 @@ def update(host, http_port, https_port, dest):
     # Reload Haproxy config
     subprocess.call(["sv","reload","haproxy"])
 
+@click.group()
+def cli():
+    pass
+
+@cli.command("template")
+def template():
+    # Persist the new change
+    d = SqliteDict(OUTPUT_PATH)
+    # Update the haproxy.cfg
+    update_haproxy(d)
+    sys.exit(0)
+
+@cli.command("update")
+@click.argument("host")
+@click.argument("http_port")
+@click.argument("https_port")
+@click.argument("dest")
+def update(host, http_port, https_port, dest):
+    """Update from command line arguments"""
+    do_update(host,http_port,https_port,dest)
+    sys.exit(0)
+
+@cli.command("update-from-dir")
+@click.argument("filename", type=click.Path(dir_okay=True, file_okay=False, exists=True, readable=True))
+def update_from_file(filename):
+    """Update from JSON file supplied on command line"""
+    for fname in os.listdir(filename):
+        fpath = os.path.join(filename, fname)
+        if os.path.isfile(fpath):
+            logger.info(f"Applying config from {fpath}")
+            with open(fpath, "r") as f:
+                base = json.load(filename)
+                if isinstance(base, Sequence):
+                    for j in base:
+                        do_update(j["host"],j["http_port"],j["https_port"],j["dest"])
+                else:
+                    j = base
+                    do_update(j["host"],j["http_port"],j["https_port"],j["dest"])
     sys.exit(0)
 
 if __name__ == "__main__":

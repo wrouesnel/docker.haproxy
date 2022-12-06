@@ -23,7 +23,7 @@ function reload_haproxy() {
         -db \
         -p /run/haproxy.pid \
         -f /run/haproxy.cfg \
-        -sf $(cat /run/haproxy.pid) \
+        -sf "$(cat /run/haproxy.pid)" \
         -x /run/haproxy.admin.sock \
         1> /run/log/haproxy 2>&1 &
     haproxy_pid=$!

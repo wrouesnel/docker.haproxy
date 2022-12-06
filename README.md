@@ -26,6 +26,34 @@ a simple REST API which manages the HAproxy configurations. Optionally
 the config can be persisted by mounting the `/data` directory to a
 persistent store to allow it to reset on launch.
 
+### Stateless Configuration
+
+If you want to use a stateless, declarative configuration then the application also can read a directory
+of configuration items (consistent with a Kubernetes config map being mounted) to set endpoints. The directory
+should be a simple flat directory of JSON files which contain the configuration items (see below).
+
+By default this directory should be mounted at `/config`.
+
+```json
+{ 
+   "host" : "a-frontend-domain", 
+   "http_port" : "88", 
+   "https_port" : "444", 
+   "dest" : "a-backend-domain"  
+}
+```
+
+Note in the example above http and https ports are 88 and 444. This is because this server is behind a NAT and uses
+these to advertise its external services.
+
+Usages are:
+
+* `host`: the frontend hostname. This value is expected to be sent as the SNI name.
+* `http_port`: the port on the `dest` server to send HTTP traffic too.
+* `https_port`: the port on the `dest` server to send HTTPS traffic too.
+* `dest`: the backend server, specified by either DNS or IP address. You will frequently use DNS name when running with
+   proxychains enabled for an outbound proxy server.
+
 ## Endpoints
 
 Control endpoints and metrics are implemented on port 8443 and by default

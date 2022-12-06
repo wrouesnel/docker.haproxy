@@ -169,13 +169,15 @@ elif ! mountpoint "$DATA_DIR" >/dev/null 2>&1 ; then
     mkdir -m 755 -p "$DATA_DIR"
 fi
 
-chmod 755 $DATA_DIR
+if ! chmod 755 "$DATA_DIR"; then
+    warn "Could not chmod $DATA_DIR - proceeding but startup may fail"
+fi
 
 # Initial syslog configuration
 export SERVICES="init init.warning"
 
 # Create the log directory
-mkdir /run/log
+mkdir -p /run/log
 chmod 755 /run/log
 mkfifo /run/log/init
 mkfifo /run/log/init.warning
@@ -184,7 +186,7 @@ p2 -t /etc/syslog-ng.conf.p2 -o /run/syslog-ng.conf || ( fatal "Templating syslo
 chmod 644 /run/syslog-ng.conf
 
 # Start syslog-ng as early as possible so we can log with it.
-mkdir /run/services
+mkdir -p /run/services
 cp -af /etc/services/syslog-ng /run/services/syslog-ng
 runsvdir /run/services &
 export INIT_PID=$!
@@ -201,12 +203,12 @@ set -e
 log "Starting up with hostname: $HOSTNAME"
 
 # Create SSL configuration directory
-mkdir /run/ssl
+mkdir -p /run/ssl
 chmod 0755 /run/ssl
-mkdir /run/ca-certificates
+mkdir -p /run/ca-certificates
 chmod 0755 /run/ca-certificates
 if [ -z "$PLATFORM_TLS_TRUST_CERTIFICATES" ]; then
-    if [ $(stdbool "$DEV_ALLOW_DEFAULT_TRUST") = "y" ]; then
+    if [ "$(stdbool "$DEV_ALLOW_DEFAULT_TRUST")" = "y" ]; then
         # Allowing defaults
         cp -a /etc/ssl.default/. /run/ssl/
         cp -f  /etc/ca-certificates.conf.default /run/ca-certificates.conf
@@ -216,7 +218,7 @@ if [ -z "$PLATFORM_TLS_TRUST_CERTIFICATES" ]; then
     fi
 else
     # Generate the directory structure manually
-    mkdir /run/ssl/certs /run/ssl/private
+    mkdir -p /run/ssl/certs /run/ssl/private
     chmod 0755 /run/ssl/certs
     chmod 0750 /run/ssl/private
     chown root:ssl-cert /run/ssl/private
@@ -240,7 +242,7 @@ else
     log "Platform trust certificates specified."  
 fi
 
-if [ $(stdbool "$ADMIN_AUTH") = "y" ]; then
+if [ "$(stdbool "$ADMIN_AUTH")" = "y" ]; then
     if [ -z "$ADMIN_USER" ] ; then
         fatal "No ADMIN_USER specified. This is required for the time being."
     fi
@@ -250,7 +252,7 @@ if [ $(stdbool "$ADMIN_AUTH") = "y" ]; then
     # Force update the htpasswd file with the correct credentials
     log "Force updating: $admin_passwd"
     crypted_password=$(mkpasswd -m sha-512 "$ADMIN_PASSWORD")
-    echo "${ADMIN_USER}:${crypted_password}" > $admin_passwd
+    echo "${ADMIN_USER}:${crypted_password}" > "$admin_passwd"
 
     # echo "$ADMIN_PASSWORD" | htpasswd -ci "$admin_htpasswd" "$ADMIN_USER"
     # if [ $? != 0 ] ; then
@@ -263,7 +265,7 @@ else
 fi
 
 if [ -z "${WEBUI_SSL_SERVER_CERT}" ] && [ -z "${WEBUI_SSL_SERVER_KEY}" ] ; then
-    if [ "$(stdbool $DEV_ALLOW_SELF_SIGNED)" != "y" ] ; then
+    if [ "$(stdbool "$DEV_ALLOW_SELF_SIGNED")" != "y" ] ; then
         fatal "WEBUI_SSL_SERVER_CERT and WEBUI_SSL_SERVER_KEY are blank but self-signed certificates are not allowed."    
     fi
     
@@ -299,7 +301,7 @@ cat /run/nginx-cert.crt /run/nginx-key.pem > /run/haproxy_certs.pem
 chmod 640 /run/haproxy_certs.pem
 
 log "Checking data directory status..."
-if ! mountpoint "$DATA_DIR" && [ $(stdbool $DEV_ALLOW_EPHEMERAL_DATA) != "y" ] ; then
+if ! mountpoint "$DATA_DIR" && [ "$(stdbool $DEV_ALLOW_EPHEMERAL_DATA)" != "y" ] ; then
     fatal "$DATA_DIR is not a mountpoint. Data will not persist, and this is not allowed."
 elif ! mountpoint "$DATA_DIR" ; then
     warn "WARNING: allowing an ephemeral data directory."
@@ -307,12 +309,15 @@ elif ! mountpoint "$DATA_DIR" ; then
 fi
 
 log "Templating syslog-ng configuration..."
-export SERVICES="$(ls -1 /etc/services | tr '\n' ' ')nginx-access nginx-error init init.warning"
+export SERVICES="$(find /etc/services -printf "%f ")nginx-access nginx-error init init.warning"
 p2 -t /etc/syslog-ng.conf.p2 -o /run/syslog-ng.conf || ( fatal "Templating syslog-ng config failed." )
 chmod 644 /run/syslog-ng.conf
 
 log "Create logging fifo directory"
 mkdir -p /run/log
+
+log "Initializing static HAProxy configuration"
+/usr/local/bin/webhook-forwarder update-from-dir "${CONFIG_DIR}"
 
 log "Templating initial HAProxy configuration"
 /usr/local/bin/webhook-forwarder template
